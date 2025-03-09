@@ -1,3 +1,8 @@
 dataset_raw_dir: ${hydra:runtime.cwd}/data/runs
 interim_path: ${hydra:runtime.cwd}/data/interim
+processed_path: ${hydra:runtime.cwd}/data/processed
 time_step: 5
+
+defaults:
+  - __self__
+  - simulation_summary
