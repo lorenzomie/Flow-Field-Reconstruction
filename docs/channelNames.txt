@@ -264,24 +264,24 @@ Number of correction iterations:  0
       23  Spn8ALyb1   (m/s^2)     ElastoDyn
       24  Spn9ALxb1   (m/s^2)     ElastoDyn
       25  Spn9ALyb1   (m/s^2)     ElastoDyn
-      26  Spn1MLxb1   (kN·m)      ElastoDyn
-      27  Spn1MLyb1   (kN·m)      ElastoDyn
-      28  Spn2MLxb1   (kN·m)      ElastoDyn
-      29  Spn2MLyb1   (kN·m)      ElastoDyn
-      30  Spn3MLxb1   (kN·m)      ElastoDyn
-      31  Spn3MLyb1   (kN·m)      ElastoDyn
-      32  Spn4MLxb1   (kN·m)      ElastoDyn
-      33  Spn4MLyb1   (kN·m)      ElastoDyn
-      34  Spn5MLxb1   (kN·m)      ElastoDyn
-      35  Spn5MLyb1   (kN·m)      ElastoDyn
-      36  Spn6MLxb1   (kN·m)      ElastoDyn
-      37  Spn6MLyb1   (kN·m)      ElastoDyn
-      38  Spn7MLxb1   (kN·m)      ElastoDyn
-      39  Spn7MLyb1   (kN·m)      ElastoDyn
-      40  Spn8MLxb1   (kN·m)      ElastoDyn
-      41  Spn8MLyb1   (kN·m)      ElastoDyn
-      42  Spn9MLxb1   (kN·m)      ElastoDyn
-      43  Spn9MLyb1   (kN·m)      ElastoDyn
+      26  Spn1MLxb1   (kNï¿½m)      ElastoDyn
+      27  Spn1MLyb1   (kNï¿½m)      ElastoDyn
+      28  Spn2MLxb1   (kNï¿½m)      ElastoDyn
+      29  Spn2MLyb1   (kNï¿½m)      ElastoDyn
+      30  Spn3MLxb1   (kNï¿½m)      ElastoDyn
+      31  Spn3MLyb1   (kNï¿½m)      ElastoDyn
+      32  Spn4MLxb1   (kNï¿½m)      ElastoDyn
+      33  Spn4MLyb1   (kNï¿½m)      ElastoDyn
+      34  Spn5MLxb1   (kNï¿½m)      ElastoDyn
+      35  Spn5MLyb1   (kNï¿½m)      ElastoDyn
+      36  Spn6MLxb1   (kNï¿½m)      ElastoDyn
+      37  Spn6MLyb1   (kNï¿½m)      ElastoDyn
+      38  Spn7MLxb1   (kNï¿½m)      ElastoDyn
+      39  Spn7MLyb1   (kNï¿½m)      ElastoDyn
+      40  Spn8MLxb1   (kNï¿½m)      ElastoDyn
+      41  Spn8MLyb1   (kNï¿½m)      ElastoDyn
+      42  Spn9MLxb1   (kNï¿½m)      ElastoDyn
+      43  Spn9MLyb1   (kNï¿½m)      ElastoDyn
       44  Spn1ALxb2   (m/s^2)     ElastoDyn
       45  Spn1ALyb2   (m/s^2)     ElastoDyn
       46  Spn2ALxb2   (m/s^2)     ElastoDyn
@@ -300,24 +300,24 @@ Number of correction iterations:  0
       59  Spn8ALyb2   (m/s^2)     ElastoDyn
       60  Spn9ALxb2   (m/s^2)     ElastoDyn
       61  Spn9ALyb2   (m/s^2)     ElastoDyn
-      62  Spn1MLxb2   (kN·m)      ElastoDyn
-      63  Spn1MLyb2   (kN·m)      ElastoDyn
-      64  Spn2MLxb2   (kN·m)      ElastoDyn
-      65  Spn2MLyb2   (kN·m)      ElastoDyn
-      66  Spn3MLxb2   (kN·m)      ElastoDyn
-      67  Spn3MLyb2   (kN·m)      ElastoDyn
-      68  Spn4MLxb2   (kN·m)      ElastoDyn
-      69  Spn4MLyb2   (kN·m)      ElastoDyn
-      70  Spn5MLxb2   (kN·m)      ElastoDyn
-      71  Spn5MLyb2   (kN·m)      ElastoDyn
-      72  Spn6MLxb2   (kN·m)      ElastoDyn
-      73  Spn6MLyb2   (kN·m)      ElastoDyn
-      74  Spn7MLxb2   (kN·m)      ElastoDyn
-      75  Spn7MLyb2   (kN·m)      ElastoDyn
-      76  Spn8MLxb2   (kN·m)      ElastoDyn
-      77  Spn8MLyb2   (kN·m)      ElastoDyn
-      78  Spn9MLxb2   (kN·m)      ElastoDyn
-      79  Spn9MLyb2   (kN·m)      ElastoDyn
+      62  Spn1MLxb2   (kNï¿½m)      ElastoDyn
+      63  Spn1MLyb2   (kNï¿½m)      ElastoDyn
+      64  Spn2MLxb2   (kNï¿½m)      ElastoDyn
+      65  Spn2MLyb2   (kNï¿½m)      ElastoDyn
+      66  Spn3MLxb2   (kNï¿½m)      ElastoDyn
+      67  Spn3MLyb2   (kNï¿½m)      ElastoDyn
+      68  Spn4MLxb2   (kNï¿½m)      ElastoDyn
+      69  Spn4MLyb2   (kNï¿½m)      ElastoDyn
+      70  Spn5MLxb2   (kNï¿½m)      ElastoDyn
+      71  Spn5MLyb2   (kNï¿½m)      ElastoDyn
+      72  Spn6MLxb2   (kNï¿½m)      ElastoDyn
+      73  Spn6MLyb2   (kNï¿½m)      ElastoDyn
+      74  Spn7MLxb2   (kNï¿½m)      ElastoDyn
+      75  Spn7MLyb2   (kNï¿½m)      ElastoDyn
+      76  Spn8MLxb2   (kNï¿½m)      ElastoDyn
+      77  Spn8MLyb2   (kNï¿½m)      ElastoDyn
+      78  Spn9MLxb2   (kNï¿½m)      ElastoDyn
+      79  Spn9MLyb2   (kNï¿½m)      ElastoDyn
       80  Spn1ALxb3   (m/s^2)     ElastoDyn
       81  Spn1ALyb3   (m/s^2)     ElastoDyn
       82  Spn2ALxb3   (m/s^2)     ElastoDyn
@@ -336,24 +336,24 @@ Number of correction iterations:  0
       95  Spn8ALyb3   (m/s^2)     ElastoDyn
       96  Spn9ALxb3   (m/s^2)     ElastoDyn
       97  Spn9ALyb3   (m/s^2)     ElastoDyn
-      98  Spn1MLxb3   (kN·m)      ElastoDyn
-      99  Spn1MLyb3   (kN·m)      ElastoDyn
-     100  Spn2MLxb3   (kN·m)      ElastoDyn
-     101  Spn2MLyb3   (kN·m)      ElastoDyn
-     102  Spn3MLxb3   (kN·m)      ElastoDyn
-     103  Spn3MLyb3   (kN·m)      ElastoDyn
-     104  Spn4MLxb3   (kN·m)      ElastoDyn
-     105  Spn4MLyb3   (kN·m)      ElastoDyn
-     106  Spn5MLxb3   (kN·m)      ElastoDyn
-     107  Spn5MLyb3   (kN·m)      ElastoDyn
-     108  Spn6MLxb3   (kN·m)      ElastoDyn
-     109  Spn6MLyb3   (kN·m)      ElastoDyn
-     110  Spn7MLxb3   (kN·m)      ElastoDyn
-     111  Spn7MLyb3   (kN·m)      ElastoDyn
-     112  Spn8MLxb3   (kN·m)      ElastoDyn
-     113  Spn8MLyb3   (kN·m)      ElastoDyn
-     114  Spn9MLxb3   (kN·m)      ElastoDyn
-     115  Spn9MLyb3   (kN·m)      ElastoDyn
+      98  Spn1MLxb3   (kNï¿½m)      ElastoDyn
+      99  Spn1MLyb3   (kNï¿½m)      ElastoDyn
+     100  Spn2MLxb3   (kNï¿½m)      ElastoDyn
+     101  Spn2MLyb3   (kNï¿½m)      ElastoDyn
+     102  Spn3MLxb3   (kNï¿½m)      ElastoDyn
+     103  Spn3MLyb3   (kNï¿½m)      ElastoDyn
+     104  Spn4MLxb3   (kNï¿½m)      ElastoDyn
+     105  Spn4MLyb3   (kNï¿½m)      ElastoDyn
+     106  Spn5MLxb3   (kNï¿½m)      ElastoDyn
+     107  Spn5MLyb3   (kNï¿½m)      ElastoDyn
+     108  Spn6MLxb3   (kNï¿½m)      ElastoDyn
+     109  Spn6MLyb3   (kNï¿½m)      ElastoDyn
+     110  Spn7MLxb3   (kNï¿½m)      ElastoDyn
+     111  Spn7MLyb3   (kNï¿½m)      ElastoDyn
+     112  Spn8MLxb3   (kNï¿½m)      ElastoDyn
+     113  Spn8MLyb3   (kNï¿½m)      ElastoDyn
+     114  Spn9MLxb3   (kNï¿½m)      ElastoDyn
+     115  Spn9MLyb3   (kNï¿½m)      ElastoDyn
      116  B1N1Alpha   (deg)       AeroDyn
      117  B1N2Alpha   (deg)       AeroDyn
      118  B1N3Alpha   (deg)       AeroDyn
