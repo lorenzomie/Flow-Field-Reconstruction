@@ -31,17 +31,3 @@ additional_mass_properties:
   tower_mass: 347460.219
   platform_mass: 0.000
   mass_including_platform: 697129.000
-
-section_distances:
-  - distance: 7.479
-  - distance: 14.312
-  - distance: 21.146
-  - distance: 27.979
-  - distance: 34.812
-  - distance: 41.646
-  - distance: 48.479
-  - distance: 55.312
-  - distance: 62.146
-
-defaults:
-  - __self__

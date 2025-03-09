@@ -10,20 +10,26 @@ import numpy as np
 
 
 
-def calculate_yz_positions(azimuth: float, distances: pd.DataFrame) -> Dict[str, np.ndarray]:
+def calculate_yz_positions(azimuth_list: list[float], distances: list[float]) -> Dict[str, np.ndarray]:
     """Calculate y-z positions for each blade based on the azimuth angle and distances."""
     positions = {"blade1": [], "blade2": [], "blade3": []}
-    for _, row in distances.iterrows():
-        r = row['distance']
-        y1 = r * math.cos(math.radians(azimuth))
-        z1 = r * math.sin(math.radians(azimuth))
-        y2 = r * math.cos(math.radians(azimuth + 120))
-        z2 = r * math.sin(math.radians(azimuth + 120))
-        y3 = r * math.cos(math.radians(azimuth + 240))
-        z3 = r * math.sin(math.radians(azimuth + 240))
-        positions["blade1"].append((y1, z1))
-        positions["blade2"].append((y2, z2))
-        positions["blade3"].append((y3, z3))
+    for azimuth_timestep in azimuth_list:
+        blade1_pos = []
+        blade2_pos = []
+        blade3_pos = []
+        for r in distances:
+            y1 = r * math.cos(math.radians(azimuth_timestep))
+            z1 = r * math.sin(math.radians(azimuth_timestep))
+            y2 = r * math.cos(math.radians(azimuth_timestep + 120))
+            z2 = r * math.sin(math.radians(azimuth_timestep + 120))
+            y3 = r * math.cos(math.radians(azimuth_timestep + 240))
+            z3 = r * math.sin(math.radians(azimuth_timestep + 240))
+            blade1_pos.append((y1, z1))
+            blade2_pos.append((y2, z2))
+            blade3_pos.append((y3, z3))
+        positions["blade1"].append(blade1_pos)
+        positions["blade2"].append(blade2_pos)
+        positions["blade3"].append(blade3_pos)
     return positions
 
 
@@ -45,32 +51,42 @@ def map_sensors_to_grid(sensor_data: pd.DataFrame, positions: Dict[str, np.ndarr
     return grid
 
 
-def process_sensor_data(interim_path: Path, distances_file: Path, distances: list[float]) -> None:
+def process_sensor_data(interim_path: Path, processed_path: Path, run_names: Path, distances: list[float], grid) -> None:
     """Process sensor data from CSV files and save as PyTorch tensors."""
-    for run_directory in interim_path.iterdir():
-        if run_directory.is_dir():
-            print(f"Processing run directory: {run_directory}")
-            
-            # Read azimuth angle from other_sensors.csv
-            other_sensors_file = run_directory / f'{run_directory.name}_other_sensors.csv'
-            other_sensors = pd.read_csv(other_sensors_file)
-            azimuth = other_sensors['Azimuth'].iloc[0]
+    for run_name in run_names:
+        print(f"Processing run: {run_name}")
+        other_sensors_file = interim_path / f'{run_name}_other_sensors.csv'
+        
+        # Read azimuth angle from other_sensors.csv
+        other_sensors = pd.read_csv(other_sensors_file)
+        azimuth = other_sensors['Azimuth'].values
 
-            # Calculate y-z positions for each blade
-            positions = calculate_yz_positions(azimuth, distances)
+        # Calculate y-z positions for each blade
+        positions = calculate_yz_positions(azimuth, distances)
 
-            # Read sensor data for each blade
-            sensor_data = pd.DataFrame()
-            for blade in ["blade1", "blade2", "blade3"]:
-                blade_sensors_file = run_directory / f'{run_directory.name}_{blade}_sensors.csv'
-                blade_sensors = pd.read_csv(blade_sensors_file)
-                sensor_data = pd.concat([sensor_data, blade_sensors], axis=1)
+        blade1_pos = positions['blade1']
+        blade2_pos = positions['blade2']
+        blade3_pos = positions['blade3']
 
-            # Map sensor data to a 21x21 grid
-            grid = map_sensors_to_grid(sensor_data, positions)
+        # Read sensor data for each blade
+        sensor_data = pd.DataFrame()
+        for blade in ["blade1", "blade2", "blade3"]:
+            blade_sensors_file = interim_path / f'{run_name}_{blade}_sensors.csv'
+            blade_sensors = pd.read_csv(blade_sensors_file)
 
-            # Save the grid as a PyTorch tensor
-            torch.save(grid, run_directory / f'{run_directory.name}_sensor_grid.pt')
+        # 1 to 9 are the sections of the blade
+        alpha_keys = [f'N{i}Alpha' for i in range(1, 9)]
+        vrel_keys = [f'N{i}Vrel' for i in range(1, 9)]
+        dynp_keys = [f'N{i}DynP' for i in range(1, 9)]
+        fn_keys = [f'N{i}Fn' for i in range(1, 9)]
+        ft_keys = [f'N{i}Ft' for i in range(1, 9)]
+
+        
+        # Map sensor data to a 21x21 grid
+        grid = map_sensors_to_grid(sensor_data, positions)
+
+        # Save the grid as a PyTorch tensor
+        torch.save(grid, processed_path / f'{run_name}_sensor_grid.pt')
 
 
 @hydra.main(config_path="config/", config_name="data_processing")
@@ -78,7 +94,8 @@ def main(cfg: DictConfig) -> None:
     """Main function to process sensor data."""
     interim_path = Path(cfg.interim_path)
     processed_path = Path(cfg.processed_path)
-    process_sensor_data(interim_path, processed_path, cfg.section_distances)
+    run_names = list(set([d.name[:7] for d in interim_path.iterdir() if d.name.startswith('run_') and d.name[4:7].isdigit()]))
+    process_sensor_data(interim_path, processed_path, run_names, cfg.section_distances)
 
 
 if __name__ == "__main__":
