@@ -4,7 +4,7 @@
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
 
-short description\
+Reconstructs the 3D velocity field along the rotor plane of a wind turbine using sensor data from the blades. Combines Transformers, PINNs, and Fourier Neural Operators (FNOs) for physics-aware, high-fidelity flow estimation. 🚀
 
 ## Project Organization
 
