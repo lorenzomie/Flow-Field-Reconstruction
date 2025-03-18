@@ -22,11 +22,11 @@ def save_tensors(ts_file: TurbSimFile, interim_path: Path, run_directory_name: s
     torch.save(torch.tensor(ts_file.t), interim_path / f'{run_directory_name}_time_steps.pt')
 
 
-def save_field_values(ts_file: TurbSimFile, interim_path: Path, run_directory_name: str, max_idx: int) -> None:
+def save_field_values(ts_file: TurbSimFile, processed_path: Path, run_directory_name: str, max_idx: int) -> None:
     """Save field values as PyTorch tensors."""
     field_values_tensor = torch.tensor(ts_file["u"]).permute(1, 0, 2, 3)
     field_values_tensor = field_values_tensor[:max_idx, :, :, :]
-    torch.save(field_values_tensor, interim_path / f'{run_directory_name}_field_values.pt')
+    torch.save(field_values_tensor, processed_path / f'{run_directory_name}_field_values.pt')
 
 
 def process_csv_row(csv_row: pd.DataFrame, output_data: pd.DataFrame, all_blade_sensors: Dict[str, Dict[str, Any]], other_sensors: Dict[str, Any]) -> None:
@@ -88,7 +88,7 @@ def save_sensors_to_csv(all_blade_sensors: Dict[str, Dict[str, Any]], other_sens
     other_sensors_df.to_csv(interim_path / f'{run_directory_name}_other_sensors.csv', index=False)
 
 
-def process_run_directory(run_directory: Path, interim_path: Path, time_step: int) -> None:
+def process_run_directory(run_directory: Path, interim_path: Path, processed_path: Path, time_step: int) -> None:
     """Process a single run directory."""
     print(f"Processing run directory: {run_directory}")
     
@@ -127,7 +127,7 @@ def process_run_directory(run_directory: Path, interim_path: Path, time_step: in
             process_csv_row(csv_rows, output_data, all_blade_sensors, other_sensors)
 
     print(f"Max index: {max_idx}")
-    save_field_values(ts_file, interim_path, run_directory.name, max_idx)
+    save_field_values(ts_file, processed_path, run_directory.name, max_idx)
     save_sensors_to_csv(all_blade_sensors, other_sensors, interim_path, run_directory.name)
 
 
@@ -141,7 +141,7 @@ def read_turbulence_and_output_data(cfg: DictConfig) -> None:
     
     for run_directory in runs_path.iterdir():
         if run_directory.is_dir():
-            process_run_directory(run_directory, interim_path, cfg.time_step)
+            process_run_directory(run_directory, interim_path, processed_path, cfg.time_step)
     
     # Save y,z and time coordinate for the last file (arbitrary)
     ts_file = TurbSimFile(run_directory / FileNames.TURBULENT_FIELD.value)

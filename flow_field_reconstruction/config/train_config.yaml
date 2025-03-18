@@ -1,0 +1,22 @@
+dataset:
+  path: ${hydra:runtime.cwd}/data/related_realizations
+  subseq_length: 1024
+  batch_size: 1
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+
+model:
+  d_model: 64
+  nhead: 4 # number of heads in the multiheadattention models
+  num_layers: 3 # number of sub-encoder-layers in the encoder
+  dim_feedforward: 256 # dimension of the feedforward network model
+  dropout: 0.1 # the dropout value
+  target_dim: 3 # x,y,z
+  height: 21 # Height of the flow field
+  width: 21 # Width of the flow field
+  feature_dim: 9 # Number of sensors
+  max_epochs: 500
+
+training:
+  lr: 1e-3

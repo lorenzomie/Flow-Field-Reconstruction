@@ -1,139 +1,204 @@
+"""
+This script demonstrates how to train a Transformer model for flow field reconstruction using PyTorch Lightning.
+The model uses cross attention to predict flow velocities from augmented input tokens.
+"""
+# Standard libraries
+import math
+import os
+from omegaconf import DictConfig
+from pathlib import Path
+from enum import Enum
+from typing import List, Dict, Tuple, Optional
+
+# Plotting
+import matplotlib.pyplot as plt
 import numpy as np
+
+# PyTorch Lightning
+import pytorch_lightning as pl
+import seaborn as sns
+
+# PyTorch
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, random_split, Dataset
-import pytorch_lightning as pl
+from torch.utils.data import DataLoader, random_split
+import torch.nn.functional as F
+import torch.optim as optim
+
+import hydra
+from tqdm.notebook import tqdm
+
+# MLflow
+import mlflow
+from pytorch_lightning.loggers import MLFlowLogger
+mlflow.set_tracking_uri("http://127.0.0.1:8080")
 
 ##############################################
-# Dataset: Build subsequences of tokens from CSV
+# Enum for File Types
 ##############################################
 
-class FlowSequenceDataset(Dataset):
-    def __init__(self, data_file, subseq_length=1024, boundary_threshold=1e-3):
-        """
-        Loads flow data from a CSV file and returns fixed-length subsequences.
-        
-        The CSV is expected to have columns: y, z, v, w where:
-          - y, z: spatial coordinates.
-          - v, w: velocity components.
-          
-        For each token, we compute:
-          - Boundary position encoding: normalize y and z (e.g., y from [-0.5,1.5] to [0,1],
-            and z from [-0.5,0.5] to [0,1]).
-          - Boundary value encoding: if the point is near the boundary (within boundary_threshold),
-            we set the value to v, otherwise zero.
-          
-        The augmented input token is a 5-dimensional vector:
-          [y, z, pos_enc_y, pos_enc_z, boundary_value_enc]
-        The target output is a 2-dimensional vector: [v, w].
-        
-        To allow the transformer to work on sequences, we sort the data by spatial coordinates
-        and then split the full dataset into sliding windows (subsequences) of fixed length.
-        """
-        # Load data from CSV (skip header row if present)
-        data = np.loadtxt(data_file, delimiter=',', skiprows=1)
-        # Sort the data in spatial order (first by y then by z)
-        data = data[np.lexsort((data[:, 1], data[:, 0]))]
-        self.y = data[:, 0]
-        self.z = data[:, 1]
-        self.v = data[:, 2]
-        self.w = data[:, 3]
-        
-        # Determine boundary points using the provided threshold.
-        boundary_indices = (np.abs(self.y + 0.5) < boundary_threshold) | \
-                           (np.abs(self.y - 1.5) < boundary_threshold) | \
-                           (np.abs(self.z + 0.5) < boundary_threshold) | \
-                           (np.abs(self.z - 0.5) < boundary_threshold)
-        
-        # Compute boundary position encodings (normalize coordinates to [0, 1]).
-        pos_enc_y = (self.y + 0.5) / 2.0   # assuming domain y in [-0.5, 1.5]
-        pos_enc_z = (self.z + 0.5) / 1.0   # assuming domain z in [-0.5, 0.5]
-        
-        # Compute boundary value encoding (using v component for boundary points).
-        boundary_value_enc = np.zeros_like(self.v)
-        boundary_value_enc[boundary_indices] = self.v[boundary_indices]
-        
-        # Build augmented input: shape (N, 5)
-        X = np.stack([self.y, self.z, pos_enc_y, pos_enc_z, boundary_value_enc], axis=-1)
-        # Build target output: shape (N, 2)
-        Y = np.stack([self.v, self.w], axis=-1)
-        
-        # Store full sequences and subsequence length.
-        self.X = X
-        self.Y = Y
-        self.subseq_length = subseq_length
-        self.N = len(X)
-        
-        # Compute the number of subsequences (simple non-overlapping split).
-        self.num_samples = self.N // self.subseq_length
-
-    def __len__(self):
-        return self.num_samples
-
-    def __getitem__(self, idx):
-        """
-        Returns a subsequence of tokens:
-          - x: Tensor of shape (L, 5) where L is the subsequence length.
-          - y: Tensor of shape (L, 2) corresponding to the target velocities.
-        """
-        start = idx * self.subseq_length
-        end = start + self.subseq_length
-        x = torch.tensor(self.X[start:end], dtype=torch.float32)
-        y = torch.tensor(self.Y[start:end], dtype=torch.float32)
-        return x, y
+class FileType(Enum):
+    ALx = "ALx"
+    ALy = "ALy"
+    Alpha = "Alpha"
+    Dynp = "Dynp"
+    Fn = "Fn"
+    Ft = "Ft"
+    MLx = "MLx"
+    MLy = "MLy"
+    Vrel = "Vrel"
+    field_values = "field_values"
 
 ##############################################
 # DataModule: Create train, validation, and test splits
 ##############################################
 
 class FlowSequenceDataModule(pl.LightningDataModule):
-    def __init__(self, data_file, subseq_length=1024, batch_size=1, train_split=0.7, val_split=0.15, test_split=0.15):
+    def __init__(self, cfg: DictConfig):
         """
-        DataModule to load flow data and split it into training, validation, and test sets.
+        DataModule to load flow data from multiple files and split it into training, validation, and test sets.
         
         Args:
-            data_file (str): Path to the CSV file.
-            subseq_length (int): Length of each subsequence.
-            batch_size (int): Batch size for DataLoaders.
-            train_split (float): Fraction of data for training.
-            val_split (float): Fraction of data for validation.
-            test_split (float): Fraction of data for testing.
+            cfg (DictConfig): Configuration object.
         """
         super().__init__()
-        self.data_file = data_file
-        self.subseq_length = subseq_length
-        self.batch_size = batch_size
-        self.train_split = train_split
-        self.val_split = val_split
-        self.test_split = test_split
+        self.dataset_path: Path = Path(cfg.path)
+        self.subseq_length: int = cfg.subseq_length
+        self.batch_size: int = cfg.batch_size
+        self.train_split: float = cfg.train_split
+        self.val_split: float = cfg.val_split
+        self.test_split: float = cfg.test_split
 
-    def setup(self, stage=None):
-        # Load the full sequence dataset.
-        full_dataset = FlowSequenceDataset(self.data_file, self.subseq_length)
-        num_samples = len(full_dataset)
-        n_train = int(num_samples * self.train_split)
-        n_val = int(num_samples * self.val_split)
-        n_test = num_samples - n_train - n_val
+    def setup(self, stage: Optional[str] = None) -> None:
+        # Find all files in the dataset path that match the pattern 'run_*'
+        files: List[Path] = list(self.dataset_path.glob('run_*'))
+        run_group: Dict[str, List[Path]] = self.split_files(files)
+        
+        # Initialize empty lists to store the data
+        x_list: List[torch.Tensor] = []
+        y_list: List[torch.Tensor] = []
+        
+        for group_key, group_files in run_group.items():
+            dataset: Dict[str, torch.Tensor] = self.load_group_files(group_files)
+        
+            y: torch.Tensor = torch.tensor(dataset.pop("field_values"), dtype=torch.float32)  # (N, H, W, 3) velocity 3D
+            x: torch.Tensor = torch.stack([torch.tensor(v, dtype=torch.float32) for v in dataset.values()]).permute(1, 2, 3, 0)  # (N, H, W, F) sensors data
+            
+            # Exclude last element of y and x for the last timestep padding
+            x = x[:-1]
+            y = y[:-1]
+
+            # Reshape x to have the shape (N//5, 21, 21, 9)
+            N: int = x.shape[0] // 5  # Number of timesteps of the sensor for 1 timestep of the field
+            x = x[::5, :, :, :]
+            y = y.permute(0, 2, 3, 1)  # (N, 21, 21, 3)
+
+            # Append to the lists
+            x_list.append(x)
+            y_list.append(y)
+        
+        # Concatenate all tensors in the lists
+        x_full: torch.Tensor = torch.cat(x_list, dim=0)
+        y_full: torch.Tensor = torch.cat(y_list, dim=0)
+        
+        # Ensure the number of samples in x and y match
+        assert x_full.shape[0] == y_full.shape[0], "Number of samples in x and y do not match"
+        
+        # Create the full dataset
+        full_dataset: List[Tuple[torch.Tensor, torch.Tensor]] = [(x_full[i], y_full[i]) for i in range(x_full.shape[0])]
+        
+        num_samples: int = len(full_dataset)
+        n_train: int = int(num_samples * self.train_split)
+        n_val: int = int(num_samples * self.val_split)
+        n_test: int = num_samples - n_train - n_val
+        assert self.test_split == int(n_test / num_samples * 100) / 100
         
         self.train_dataset, self.val_dataset, self.test_dataset = random_split(
             full_dataset, [n_train, n_val, n_test]
         )
 
-    def train_dataloader(self):
+    def split_files(self, files: List[Path]) -> Dict[str, List[Path]]:
+        """Split the list of files into training, validation, and test sets."""
+        # Group files by the first 7 characters of their names
+        file_groups: Dict[str, List[Path]] = {}
+        for file in files:
+            group_key: str = file.name[:7]
+            if group_key not in file_groups:
+                file_groups[group_key] = []
+            file_groups[group_key].append(file)
+        return file_groups
+
+    def load_group_files(self, files: List[Path]) -> Dict[str, torch.Tensor]:
+        """Load and process files in a group."""
+        data: Dict[str, torch.Tensor] = {}
+        for file in files:
+            file_type: Optional[FileType] = self.get_file_type(file)
+            if file_type:
+                try:
+                    file_data: torch.Tensor = torch.load(file)
+                    if file_type.value in data:
+                        print(f"Warning: Overwriting existing data for {file_type.value}")
+                    data[file_type.value] = file_data
+                except Exception as e:
+                    print(f"Error loading {file}: {e}")
+        return data
+
+    def get_file_type(self, file: Path) -> Optional[FileType]:
+        """Determine the file type based on its name."""
+        for file_type in FileType:
+            if file_type.value in file.name:
+                return file_type
+        return None
+
+    def train_dataloader(self) -> DataLoader:
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> DataLoader:
         return DataLoader(self.val_dataset, batch_size=self.batch_size)
 
-    def test_dataloader(self):
+    def test_dataloader(self) -> DataLoader:
         return DataLoader(self.test_dataset, batch_size=self.batch_size)
 
-##############################################
-# Transformer Model with Cross Attention
-##############################################
+class PositionalEncoding2D(nn.Module):
+    def __init__(self, d_model: int, height: int, width: int):
+        """Positional Encoding for 2D inputs.
+
+        Args:
+            d_model: Hidden dimensionality of the input.
+            height: Height of the 2D field.
+            width: Width of the 2D field.
+        """
+        super().__init__()
+        self.height: int = height
+        self.width: int = width
+
+        pe: torch.Tensor = torch.zeros(height, width, d_model)
+        y_position: torch.Tensor = torch.arange(0, height, dtype=torch.float).unsqueeze(1).repeat(1, width)
+        x_position: torch.Tensor = torch.arange(0, width, dtype=torch.float).unsqueeze(0).repeat(height, 1)
+
+        div_term: torch.Tensor = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+
+        pe[:, :, 0::2] = torch.sin(y_position.unsqueeze(-1) * div_term)  # (H, W, d_model/2)
+        pe[:, :, 1::2] = torch.cos(x_position.unsqueeze(-1) * div_term)  # (H, W, d_model/2)
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for positional encoding.
+
+        Args:
+            x: Input tensor of shape (B, H*W, d_model), where B is batch size, d_model is the embedding dimension, H is height, and W is width.
+        
+        Returns:
+            Tensor: Input tensor with added positional encoding, shape (B, H*W, d_model).
+        """
+        B, H_W, d_model = x.shape
+        # Add positional encoding to the input
+        return x + self.pe.flatten(0, 1).unsqueeze(0)
 
 class FlowTransformer(pl.LightningModule):
-    def __init__(self, d_model=64, nhead=4, num_layers=3, input_dim=5, target_dim=2):
+    def __init__(self, cfg: DictConfig):
         """
         Transformer model that uses cross attention to predict flow velocities.
         
@@ -145,30 +210,38 @@ class FlowTransformer(pl.LightningModule):
           - A projection layer maps the resulting representation to the target output (velocity components).
         
         Args:
-            d_model (int): Embedding dimension.
-            nhead (int): Number of attention heads.
-            num_layers (int): Number of Transformer decoder layers.
-            input_dim (int): Dimension of input tokens (default is 5).
-            target_dim (int): Dimension of target output (default is 2 for v and w).
+            cfg (DictConfig): Configuration object.
         """
         super().__init__()
-        self.d_model = d_model
+        self.d_model: int = cfg.d_model
+        self.nhead: int = cfg.nhead
+        self.num_layers: int = cfg.num_layers
+        self.feature_dim: int = cfg.feature_dim
+        self.input_dim: int = cfg.height * cfg.width * cfg.feature_dim
+        self.target_dim: int = cfg.target_dim
+        self.dim_feedforward: int = cfg.dim_feedforward
+        self.dropout: float = cfg.dropout
+        self.height: int = cfg.height
+        self.width: int = cfg.width
         
-        # Embed the full augmented input (memory).
-        self.input_embedding = nn.Linear(input_dim, d_model)
+        # Embed the full augmented input
+        self.input_layer = nn.Conv2d(in_channels=self.feature_dim, out_channels=self.d_model, kernel_size=1)
         # Embed the query tokens using the spatial coordinates (first two features).
-        self.query_embedding = nn.Linear(2, d_model)
+        self.query_embedding = nn.Linear(2, self.d_model)
+        
+        # Positional encoding for 2D field
+        self.positional_encoding = PositionalEncoding2D(self.d_model, self.height, self.width)
         
         # Create a stack of TransformerDecoderLayers.
         self.decoder_layers = nn.ModuleList([
             nn.TransformerDecoderLayer(
-                d_model=d_model, nhead=nhead, dim_feedforward=128, batch_first=True
-            ) for _ in range(num_layers)
+                d_model=self.d_model, nhead=self.nhead, dim_feedforward=self.dim_feedforward, batch_first=True
+            ) for _ in range(self.num_layers)
         ])
         # Final projection to the target velocity components.
-        self.out_proj = nn.Linear(d_model, target_dim)
-        
-    def forward(self, x):
+        self.out_proj = nn.Linear(self.d_model, self.target_dim)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass.
         
@@ -178,71 +251,100 @@ class FlowTransformer(pl.LightningModule):
         Returns:
             Tensor: Predictions of shape (B, L, target_dim) corresponding to the velocity components.
         """
-        # Embed the full input to form the memory.
-        memory = self.input_embedding(x)  # (B, L, d_model)
-        # Use the first two features (spatial coordinates) as query tokens and embed them.
-        query = self.query_embedding(x[..., :2])  # (B, L, d_model)
+        B, H, W, F = x.shape  # B = batch size, H = height, W = width, F = feature dimension
         
-        # Pass through the stack of Transformer decoder layers.
-        out = query
+        # Reshape x to (B, F, H, W) for convolution
+        x_reshaped: torch.Tensor = x.permute(0, 3, 1, 2)  # (B, F, H, W)
+
+        # Important: Memory act as residual in the class itself
+        # Embed the full input to form the memory.
+        memory: torch.Tensor = self.input_layer(x_reshaped)  # (B, d_model, H, W)
+        memory = memory.permute(0, 2, 3, 1).flatten(1, 2)  # (B, H*W, d_model)
+
+        # Apply positional encoding
+        memory = self.positional_encoding(memory)  # (B, d_model, H, W) 
+
+        spatial_coords: torch.Tensor = torch.stack(
+            [torch.arange(0, H).repeat(W, 1).transpose(0, 1).flatten(),  # x-coordinates (height)
+             torch.arange(0, W).repeat(H, 1).flatten()]  # y-coordinates (width)
+        ).transpose(0, 1).float().to(x.device)  # (H*W, 2) for the query token
+
+
+        # Embed the spatial coordinates to form the query tokens
+        query: torch.Tensor = self.query_embedding(spatial_coords)  # (H * W, d_model)
+  
+        # Pass through the stack of Transformer decoder layers
+        out: torch.Tensor = query.unsqueeze(0).repeat(B, 1, 1)  # Ensure the query shape matches batch size
         for layer in self.decoder_layers:
-            # Each decoder layer uses cross attention where queries attend to memory.
             out = layer(tgt=out, memory=memory)
         
-        # Project the attended features to the target output.
+        # Project the attended features to the target output (e.g., velocity components)
         out = self.out_proj(out)  # (B, L, target_dim)
-        return out
 
-    def training_step(self, batch, batch_idx):
-        x, y = batch  # x: (B, L, 5), y: (B, L, 2)
+        # Reshape back to (B, target_dim, H, W) for image-like output
+        return out.view(B, H, W, self.target_dim)
+
+    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        x, y = batch
         y_hat = self(x)
-        loss = nn.functional.mse_loss(y_hat, y)
+        loss = F.mse_loss(y_hat, y)
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         x, y = batch
         y_hat = self(x)
-        loss = nn.functional.mse_loss(y_hat, y)
+        loss = F.mse_loss(y_hat, y)
         self.log("val_loss", loss)
         return loss
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         x, y = batch
         y_hat = self(x)
-        loss = nn.functional.mse_loss(y_hat, y)
+        loss = F.mse_loss(y_hat, y)
         self.log("test_loss", loss)
         return loss
 
-    def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=1e-3)
-
+    def configure_optimizers(self) -> Tuple[List[optim.Optimizer], List[Dict[str, object]]]:
+        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        scheduler = {
+            'scheduler': torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2),
+            'interval': 'epoch',
+            'frequency': 1
+        }
+        return [optimizer], [scheduler]
 
 ##############################################
 # Example Usage
 ##############################################
 
-if __name__ == '__main__':
-    data_file = 'flow_data.csv'  # Path to your CSV file with columns: y, z, v, w
-    subseq_length = 1024         # Adjust based on your data size
-    batch_size = 1               # Each batch is one subsequence
+@hydra.main(config_path="config", config_name="train_config.yaml")
+def main(cfg: DictConfig) -> None:
+
+    mlflow.pytorch.autolog()
+
+    # Should get the hydra runtime directory
+    mlflow_uri: str = f"file:{Path(os.getcwd()).parent.parent.parent}/mlruns/"
+    print(f"MLFlow URI: {mlflow_uri}")
+
+    # Create an MLFlow logger
+    mlflow_logger = MLFlowLogger(experiment_name="flow_field_reconstruction", tracking_uri=mlflow_uri)
 
     # Create the DataModule.
-    data_module = FlowSequenceDataModule(data_file=data_file,
-                                         subseq_length=subseq_length,
-                                         batch_size=batch_size,
-                                         train_split=0.7,
-                                         val_split=0.15,
-                                         test_split=0.15)
+    data_module = FlowSequenceDataModule(cfg.dataset)    
     
     # Instantiate the transformer model.
-    model = FlowTransformer(d_model=64, nhead=4, num_layers=3, input_dim=5, target_dim=2)
+    model = FlowTransformer(cfg.model)
     
+
     # Create a PyTorch Lightning trainer.
-    trainer = pl.Trainer(max_epochs=500)
+    trainer = pl.Trainer(max_epochs=cfg.model.max_epochs, logger=mlflow_logger)
     
     # Train the model.
     trainer.fit(model, data_module)
     
-    # (Optionally) Evaluate on the test set.
+    # Evaluate on the test set.
     trainer.test(model, datamodule=data_module)
+
+if __name__ == '__main__':
+    main()
