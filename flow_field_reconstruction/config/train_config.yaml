@@ -1,7 +1,7 @@
 dataset:
   path: ${hydra:runtime.cwd}/data/related_realizations
   subseq_length: 1024
-  batch_size: 1
+  batch_size: 1024
   train_split: 0.7
   val_split: 0.15
   test_split: 0.15
@@ -17,6 +17,7 @@ model:
   width: 21 # Width of the flow field
   feature_dim: 9 # Number of sensors
   max_epochs: 500
+  alpha: 200.0 # Weight for the cosine similarity loss
 
 training:
   lr: 1e-3

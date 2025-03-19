@@ -31,6 +31,7 @@ from tqdm.notebook import tqdm
 # MLflow
 import mlflow
 from pytorch_lightning.loggers import MLFlowLogger
+from pytorch_lightning.callbacks import EarlyStopping
 mlflow.set_tracking_uri("http://127.0.0.1:8080")
 
 ##############################################
@@ -223,6 +224,7 @@ class FlowTransformer(pl.LightningModule):
         self.dropout: float = cfg.dropout
         self.height: int = cfg.height
         self.width: int = cfg.width
+        self.alpha: float = cfg.alpha
         
         # Embed the full augmented input
         self.input_layer = nn.Conv2d(in_channels=self.feature_dim, out_channels=self.d_model, kernel_size=1)
@@ -287,22 +289,34 @@ class FlowTransformer(pl.LightningModule):
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         x, y = batch
         y_hat = self(x)
-        loss = F.mse_loss(y_hat, y)
+        mse_loss = F.mse_loss(y_hat, y)
+        similarity_loss = cosine_similarity_loss_2d(y, y_hat)
+        loss = mse_loss + self.alpha * similarity_loss
         self.log("train_loss", loss)
+        self.log("mse_loss", mse_loss)
+        self.log("similarity_loss", similarity_loss)
         return loss
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         x, y = batch
         y_hat = self(x)
-        loss = F.mse_loss(y_hat, y)
-        self.log("val_loss", loss)
+        mse_loss = F.mse_loss(y_hat, y)
+        similarity_loss = cosine_similarity_loss_2d(y, y_hat)
+        loss = mse_loss + self.alpha * similarity_loss
+        self.log("val_loss", loss)  # Change log key to 'val_loss'
+        self.log("mse_loss", mse_loss)
+        self.log("similarity_loss", similarity_loss)
         return loss
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         x, y = batch
         y_hat = self(x)
-        loss = F.mse_loss(y_hat, y)
+        mse_loss = F.mse_loss(y_hat, y)
+        similarity_loss = cosine_similarity_loss_2d(y, y_hat)
+        loss = mse_loss + self.alpha * similarity_loss
         self.log("test_loss", loss)
+        self.log("mse_loss", mse_loss)
+        self.log("similarity_loss", similarity_loss)
         return loss
 
     def configure_optimizers(self) -> Tuple[List[optim.Optimizer], List[Dict[str, object]]]:
@@ -313,6 +327,34 @@ class FlowTransformer(pl.LightningModule):
             'frequency': 1
         }
         return [optimizer], [scheduler]
+
+def cosine_similarity_loss_2d(y_true, y_pred):
+    """
+    Computes the cosine similarity between two 2D fields of vectors (e.g., velocity or direction).
+    
+    Args:
+        y_true (torch.Tensor): True tensor of shape (B, H, W, d)
+        y_pred (torch.Tensor): Predicted tensor of shape (B, H, W, d)
+        
+    Returns:
+        torch.Tensor: Cosine similarity tensor of shape (B, H, W)
+    """
+    # Flatten the fields into (B * H * W, d)
+    y_true_flat = y_true.view(-1, y_true.shape[-1])  # (B * H * W, d)
+    y_pred_flat = y_pred.view(-1, y_pred.shape[-1])  # (B * H * W, d)
+
+    # Compute the cosine similarity between the corresponding vectors
+    cos_sim = F.cosine_similarity(y_true_flat, y_pred_flat, dim=-1)  # (B * H * W)
+    
+    # Reshape the result back to (B, H, W)
+    cos_sim = cos_sim.view(y_true.shape[0], y_true.shape[1], y_true.shape[2])  # (B, H, W)
+    
+    cos_sim_loss = 1 - cos_sim  # Shape: (B, H, W)
+
+    # Average the loss over all positions and batch elements
+    cos_sim_loss = cos_sim_loss.mean()  # Scalar
+
+    return cos_sim_loss
 
 ##############################################
 # Example Usage
@@ -336,9 +378,21 @@ def main(cfg: DictConfig) -> None:
     # Instantiate the transformer model.
     model = FlowTransformer(cfg.model)
     
+    # Add early stopping callback
+    early_stopping = EarlyStopping(
+        monitor='val_loss',  # Metric to monitor
+        patience=5,          # Number of epochs with no improvement after which training will be stopped
+        verbose=True,        # Verbosity mode
+        mode='min',          # Mode for the monitored metric ('min' or 'max')
+        min_delta=0.02      # Minimum change in the monitored metric to qualify as an improvement
+    )
 
     # Create a PyTorch Lightning trainer.
-    trainer = pl.Trainer(max_epochs=cfg.model.max_epochs, logger=mlflow_logger)
+    trainer = pl.Trainer(
+        max_epochs=cfg.model.max_epochs, 
+        logger=mlflow_logger,
+        callbacks=[early_stopping]  # Add the early stopping callback
+    )
     
     # Train the model.
     trainer.fit(model, data_module)
